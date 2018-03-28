@@ -28,7 +28,6 @@ String uidList[tagAmount];
 int uidSize;
 String tempUid;
 String tempUid2;
-bool scanned;
 bool scannedList[tagAmount];
 
 String messageList[tagAmount];
@@ -71,7 +70,7 @@ MFRC522 mfrc522(5, 17);
 CRGB leds[NUM_LEDS];
 
 void setup(void) {
-  //Serial.begin(115200);
+  Serial.begin(115200);
   FastLED.addLeds<NEOPIXEL, ledPin>(leds, NUM_LEDS);
   pinMode(vibPin, OUTPUT);
   mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
@@ -98,6 +97,8 @@ void loop(void) {
   if (mfrc522.PICC_IsNewCardPresent()) {
     getUID();
     for (int i = 0; i < tagAmount; i++) {
+      Serial.print("ScannedList: ");
+      Serial.println(scannedList[i]);
       if (uidList[i] == scannedUid && scannedList[i] == false) {
         updateLeds();
         printText();
@@ -235,7 +236,6 @@ void getUID() {
     }
     tempUid = tempUid + tempUid2 + String(mfrc522.uid.uidByte[i], HEX);
   }
-  //Serial.println(tempUid);
   scannedUid = tempUid;
   tempUid = "";
 }
@@ -322,7 +322,13 @@ void vibTimer() {
 
 void updateScannedList() {
   for (int i = 0; i < tagAmount; i++) {
-    if (uidList[i] = scannedUid) {
+    if (uidList[i] == scannedUid) {
+      Serial.print("UID: ");
+      Serial.println(uidList[i]);
+      Serial.print("ScannedList: ");
+      Serial.println(scannedList[i]);
+      Serial.print("i: ");
+      Serial.println(i);
       scannedList[i] = true;
     }
   }
