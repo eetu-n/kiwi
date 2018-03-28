@@ -20,16 +20,19 @@ OOCSI oocsi = OOCSI();
 
 int curMillis = 0;
 
+String oocsiMessage = "scannedUid";
+
 String uid;
 String scannedUid;
 String uidList[tagAmount];
 int uidSize;
 String tempUid;
 String tempUid2;
+bool scanned;
+bool scannedList[tagAmount];
 
 String messageList[tagAmount];
-String messageIn = "Hello World!";
-const char* messageOut;
+String message = "Hello World!";
 int messageTime = 1000;
 int messageTimeList[tagAmount];
 
@@ -76,7 +79,6 @@ void setup(void) {
   mfrc522.PCD_Init();
   oocsi.setLogging(false);
 
-  messageOut = messageIn.c_str();
   oocsi.connect(OOCSIName, hostserver, ssid, password, processOOCSI);
   oocsi.subscribe("esp-testchannel");
 
@@ -95,8 +97,14 @@ void setup(void) {
 void loop(void) {
   if (mfrc522.PICC_IsNewCardPresent()) {
     getUID();
-    updateLeds();
-    printText();
+    for (int i = 0; i < tagAmount; i++) {
+      if (uidList[i] == scannedUid && scannedList[i] == false) {
+        updateLeds();
+        printText();
+        sendOocsi();
+        updateScannedList();
+      }
+    }
   }
 
   ledPattern();
@@ -106,31 +114,32 @@ void loop(void) {
 
 void processOOCSI() {
   uid = oocsi.getString("uid", 0);
-  
+
   line = oocsi.getInt("line", 0);
-  messageIn = oocsi.getString("message", "-200");
-  
+  message = oocsi.getString("message", "-200");
+
   delayer = oocsi.getInt("delay", 0);
   timer = oocsi.getInt("time", 0);
   repeat = oocsi.getInt("repeat", 0);
-  
+
   hue = oocsi.getInt("hue", 0);
   brightness = oocsi.getInt("brightness", 0);
   tempLedMode = oocsi.getInt("ledMode", 0);
-  
+
 
   for (int i = 0; i < tagAmount; i++) {
     if (uidList[i] == uid) {
-      messageList[i] = messageIn;
+      messageList[i] = message;
       lineList[i] = line;
-      
+
       repeatList[i] = repeat;
       delayList[i] = delayer;
       timeList[i] = timer;
-      
+
       hueList[i] = hue;
       brightnessList[i] = brightness;
       ledModeList[i] = tempLedMode;
+      scannedList[i] = false;
 
       //Serial.print("Message: ");
       //Serial.println(messageList[i]);
@@ -147,17 +156,19 @@ void processOOCSI() {
       break;
     } else if (uidList[i] == "") {
       uidList[i] = uid;
-      
-      messageList[i] = messageIn;
+
+      messageList[i] = message;
       lineList[i] = line;
 
       repeatList[i] = repeat;
       delayList[i] = delayer;
       timeList[i] = timer;
-      
+
       hueList[i] = hue;
       brightnessList[i] = brightness;
       ledModeList[i] = tempLedMode;
+
+      scannedList[i] = false;
 
       //Serial.print("UID: ");
       //Serial.println(uidList[i]);
@@ -232,9 +243,8 @@ void getUID() {
 void printText() {
   for (int i = 0; i < tagAmount; i++) {
     if (uidList[i] == scannedUid) {
-      messageOut = messageList[i].c_str();
       u8x8.clearDisplay();
-      u8x8.drawString(0, lineList[i], messageOut);
+      u8x8.drawString(0, lineList[i], messageList[i].c_str());
       break;
     } else if (uidList[i] == "") {
       uidList[i] = scannedUid;
@@ -308,5 +318,19 @@ void vibTimer() {
       }
     }
   }
+}
+
+void updateScannedList() {
+  for (int i = 0; i < tagAmount; i++) {
+    if (uidList[i] = scannedUid) {
+      scannedList[i] = true;
+    }
+  }
+}
+
+void sendOocsi(){
+  oocsi.newMessage("esp-testchannel");
+  oocsi.addString(oocsiMessage.c_str(), scannedUid.c_str());
+  oocsi.sendMessage();
 }
 
