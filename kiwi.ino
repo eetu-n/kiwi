@@ -11,16 +11,15 @@
 #define vibPin 12     //Pin for the vibration motor
 #define ledPin 13     //Pin for the LED strip
 #define tagAmount 10  //Number of NFC tags the kiwi should be able to handle
+#define DEBUG false
 
 const char* ssid = "Narhi";
 const char* password = "rusinapallo";
-const char* OOCSIName = "kiwi";
+const char* OOCSIName = "kiwiScanner";
 const char* hostserver = "oocsi.id.tue.nl";
 OOCSI oocsi = OOCSI();
 
 int curMillis = 0;    // Used to keep track of time
-
-String oocsiMessage = "scannedUid";   // The oocsi message for UID output
 
 String uid;                   //UID received from oocsi
 String scannedUid;            //UID scanned by kiwi
@@ -30,24 +29,28 @@ String tempUid;               // -||-
 String tempUid2;              // -||-
 bool scannedList[tagAmount];  //Whether a particular UID has already been scanned
 
-String messageList[tagAmount];    //List of messages
-String message = "Hello World!";  //Temporary variable used for receiving messages from oocsi
+String message0List[tagAmount];    //List of messages
+String message1List[tagAmount];
+String message2List[tagAmount];
+String message3List[tagAmount];
+String message0 = "Hello World!";  //Temporary variable used for receiving messages from oocsi
+String message1 = "Hello World!";
+String message2 = "Hello World!";
+String message3 = "Hello World!";
 int messageTime = 1000;           //Temporary variable used for receiving message times from oocsi
 int messageTimeList[tagAmount];   //List of times messages should be displayed
-
-int lineList[tagAmount];          //List of output lines
-int line = 0;                     //Temporary value used to keep track of line received from oocsi
 
 int delayer = 0;                  //Temporary variable used to keep track of delay for vibration
 int delayList[tagAmount];         //List of delay times
 int timer = 0;                    //Time the motor should vibrate
 int timeList[tagAmount];          //List of times motor should vibrate
-bool vibrate = false;             //Temporary variable used to receive whether vibration should happen from oocsi
-bool vibList[tagAmount];          //List of vibration booleans
 int repeat = 1;                   //Temporary repeat variable
 int repeatList[tagAmount];        //List of how many times motor should vibrate
-int vibOn = false;                //Variable to keep track of whether motor is currently vibrating or not
 int vibDelay;                     //Internal variable used for switching between delay and time in the method
+bool vibOn = false;
+int curDelay;
+int curTime;
+int curRepeat;
 
 int hue = 0;                      //Temporary hue for receiving from oocsi
 int hueList[tagAmount];           //List of Hues
@@ -70,22 +73,26 @@ MFRC522 mfrc522(5, 17);                                             //Initialize
 CRGB leds[NUM_LEDS];                                                //Initialize LED strip
 
 void setup(void) {
-  //Serial.begin(115200);
+  if (DEBUG) {
+    Serial.begin(115200);
+  }
   FastLED.addLeds<NEOPIXEL, ledPin>(leds, NUM_LEDS);                    //Begin LED strip
   pinMode(vibPin, OUTPUT);                                              //Define vibration motor pin to output
   mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);                       //Set maximum gain for NFC scanner
   SPI.begin();                                                          //Begin SPI communication with scanner
   mfrc522.PCD_Init();                                                   //Couple scanner with SPI
-  oocsi.setLogging(false);                                              //Disable oocsi messages
+  oocsi.setLogging(DEBUG);                                              //Disable oocsi messages
 
   oocsi.connect(OOCSIName, hostserver, ssid, password, processOOCSI);   //Connect to oocsi
-  oocsi.subscribe("esp-testchannel");                                   //Subscribe to channel
+  oocsi.subscribe("kiwiReceiver");                                   //Subscribe to channel
 
   u8x8.begin();                                                         //Begin the display
   u8x8.setPowerSave(0);                                                 //Turn off power saving on display
 
   u8x8.setFont(u8x8_font_chroma48medium8_r);                            //Set display font
   u8x8.drawString(0, 0, "Welcome");                                     //Display welcome message
+
+  digitalWrite(vibPin, LOW);
 
   ledMillis = millis();                                                 //Initialize timing variables
   vibMillis = millis();
@@ -100,6 +107,7 @@ void loop(void) {
       if (uidList[i] == scannedUid && scannedList[i] == false) {        //If this card has not been scanned yet, procede
         updateLeds();                                                   //Update the LEDs
         printText();                                                    //Update display
+        setVib();
         sendOocsi();                                                    //Send oocsi message that card was scanned
         updateScannedList();                                            //Update scannedList to reflect card has been scanned
       }
@@ -114,8 +122,10 @@ void loop(void) {
 void processOOCSI() {
   uid = oocsi.getString("uid", 0);
 
-  line = oocsi.getInt("line", 0);
-  message = oocsi.getString("message", "-200");
+  message0 = oocsi.getString("message0", "-200");
+  message1 = oocsi.getString("message1", "-200");
+  message2 = oocsi.getString("message2", "-200");
+  message3 = oocsi.getString("message3", "-200");
 
   delayer = oocsi.getInt("delay", 0);
   timer = oocsi.getInt("time", 0);
@@ -128,8 +138,10 @@ void processOOCSI() {
 
   for (int i = 0; i < tagAmount; i++) {  //Records all received values in the same index in all arrays
     if (uidList[i] == uid) {
-      messageList[i] = message;
-      lineList[i] = line;
+      message0List[i] = message0;
+      message1List[i] = message1;
+      message2List[i] = message2;
+      message3List[i] = message3;
 
       repeatList[i] = repeat;
       delayList[i] = delayer;
@@ -140,24 +152,32 @@ void processOOCSI() {
       ledModeList[i] = tempLedMode;
       scannedList[i] = false;
 
-      //Serial.print("Message: ");
-      //Serial.println(messageList[i]);
-      //Serial.print("Line: ");
-      //Serial.println(lineList[i]);
-      //Serial.print("Hue: ");
-      //Serial.println(hueList[i]);
-      //Serial.print("Brightness: ");
-      //Serial.println(brightnessList[i]);
-      //Serial.print("Led Mode: ");
-      //Serial.println(ledModeList[i]);
-      //Serial.print("Repeat: ");
-      //Serial.println(repeatList[i]);
+      if (DEBUG) {
+        Serial.print("Message0: ");
+        Serial.println(message0List[i]);
+        Serial.print("Message1: ");
+        Serial.println(message1List[i]);
+        Serial.print("Message2: ");
+        Serial.println(message2List[i]);
+        Serial.print("Message3: ");
+        Serial.println(message3List[i]);
+        Serial.print("Hue: ");
+        Serial.println(hueList[i]);
+        Serial.print("Brightness: ");
+        Serial.println(brightnessList[i]);
+        Serial.print("Led Mode: ");
+        Serial.println(ledModeList[i]);
+        Serial.print("Repeat: ");
+        Serial.println(repeatList[i]);
+      }
       break;
     } else if (uidList[i] == "") {        //If the received UID is not yet scanned. Same as above, also records the UID in an empty slot
       uidList[i] = uid;
 
-      messageList[i] = message;
-      lineList[i] = line;
+      message0List[i] = message0;
+      message1List[i] = message1;
+      message2List[i] = message2;
+      message3List[i] = message3;
 
       repeatList[i] = repeat;
       delayList[i] = delayer;
@@ -169,20 +189,26 @@ void processOOCSI() {
 
       scannedList[i] = false;
 
-      //Serial.print("UID: ");
-      //Serial.println(uidList[i]);
-      //Serial.print("Message: ");
-      //Serial.println(messageList[i]);
-      //Serial.print("Line: ");
-      //Serial.println(lineList[i]);
-      //Serial.print("Hue: ");
-      //Serial.println(hueList[i]);
-      //Serial.print("Brightness: ");
-      //Serial.println(brightnessList[i]);
-      //Serial.print("Led Mode: ");
-      //Serial.println(ledModeList[i]);
-      //Serial.print("Repeat: ");
-      //Serial.println(repeatList[i]);
+      if (DEBUG) {
+        Serial.print("UID: ");
+        Serial.println(uidList[i]);
+        Serial.print("Message0: ");
+        Serial.println(message0List[i]);
+        Serial.print("Message1: ");
+        Serial.println(message1List[i]);
+        Serial.print("Message2: ");
+        Serial.println(message2List[i]);
+        Serial.print("Message3: ");
+        Serial.println(message3List[i]);
+        Serial.print("Hue: ");
+        Serial.println(hueList[i]);
+        Serial.print("Brightness: ");
+        Serial.println(brightnessList[i]);
+        Serial.print("Led Mode: ");
+        Serial.println(ledModeList[i]);
+        Serial.print("Repeat: ");
+        Serial.println(repeatList[i]);
+      }
       break;
     }
   }
@@ -233,11 +259,17 @@ void printText() {                                                //Updates the 
   for (int i = 0; i < tagAmount; i++) {
     if (uidList[i] == scannedUid) {
       u8x8.clearDisplay();
-      u8x8.drawString(0, lineList[i], messageList[i].c_str());
+      u8x8.drawString(0, 0, message0List[i].c_str());
+      u8x8.drawString(0, 1, message1List[i].c_str());
+      u8x8.drawString(0, 2, message2List[i].c_str());
+      u8x8.drawString(0, 3, message3List[i].c_str());
       break;
     } else if (uidList[i] == "") {                                //TODO: Move this to appropriate method
       uidList[i] = scannedUid;
-      messageList[i] = "";
+      message0List[i] = "";
+      message1List[i] = "";
+      message2List[i] = "";
+      message3List[i] = "";
       break;
     }
   }
@@ -285,26 +317,43 @@ void vibTimer() {                                 //Controls vibration timings
   curMillis = millis();
   for (int i = 0; i < tagAmount; i++) {
     if (uidList[i] == scannedUid) {
-      if (repeatList[i] > 0) {
+      if (curRepeat > 0) {
         if (vibOn) {
-          vibDelay = timeList[i];
+          vibDelay = curTime;
         } else {
-          vibDelay = delayList[i];
+          vibDelay = curDelay;
         }
         if (curMillis - vibMillis >= vibDelay) {
-          repeatList[i]--;
           if (vibOn) {
-            //Serial.println("Low");
+            if (DEBUG) {
+              Serial.println("Vib off");
+            }
             digitalWrite(vibPin, LOW);
             vibOn = false;
+            curRepeat--;
           } else {
-            //Serial.println("High");
+            if (DEBUG) {
+              Serial.println("Vib on");
+            }
             digitalWrite(vibPin, HIGH);
             vibOn = true;
           }
           vibMillis = millis();
         }
+      } else {
+        vibOn = false;
+        digitalWrite(vibPin, LOW);
       }
+    }
+  }
+}
+
+void setVib() {
+  for (int i = 0; i < tagAmount; i++) {
+    if (uidList[i] == scannedUid) {
+      curDelay = delayList[i];
+      curTime = timeList[i];
+      curRepeat = repeatList[i];
     }
   }
 }
@@ -312,25 +361,22 @@ void vibTimer() {                                 //Controls vibration timings
 void updateScannedList() {
   for (int i = 0; i < tagAmount; i++) {
     if (uidList[i] == scannedUid) {
-      //Serial.print("UID: ");
-      //Serial.println(uidList[i]);
-      //Serial.print("ScannedList: ");
-      //Serial.println(scannedList[i]);
-      //Serial.print("i: ");
-      //Serial.println(i);
+      if (DEBUG) {
+        Serial.print("UID: ");
+        Serial.println(uidList[i]);
+        Serial.print("ScannedList: ");
+        Serial.println(scannedList[i]);
+        Serial.print("i: ");
+        Serial.println(i);
+      }
       scannedList[i] = true;
     }
   }
 }
 
 void sendOocsi() {
-  oocsi.newMessage("esp-testchannel");
-  oocsi.addString(oocsiMessage.c_str(), scannedUid.c_str());
+  oocsi.newMessage("kiwiSender");
+  oocsi.addString("scannedUid", scannedUid.c_str());
   oocsi.sendMessage();
-}
-
-void textTimer() {
-  return;
-  //TODO implementation
 }
 
