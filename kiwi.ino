@@ -110,8 +110,12 @@ void loop(void) {
         setVib();
         sendOocsi();                                                    //Send oocsi message that card was scanned
         updateScannedList();                                            //Update scannedList to reflect card has been scanned
+      } else if (uidList[i] == ""){
+        sendOocsi();
+        uidList[i] = scannedUid;
       }
     }
+    
   }
 
   ledPattern();                                                         //Pulse controller
@@ -120,7 +124,7 @@ void loop(void) {
 }
 
 void processOOCSI() {
-  uid = oocsi.getString("uid", 0);
+  uid = oocsi.getString("uid", "0");
 
   message0 = oocsi.getString("message0", "-200");
   message1 = oocsi.getString("message1", "-200");
@@ -135,8 +139,14 @@ void processOOCSI() {
   brightness = oocsi.getInt("brightness", 0);
   tempLedMode = oocsi.getInt("ledMode", 0);
 
+  if (uid == "0") {
+    execute();
+  }
 
   for (int i = 0; i < tagAmount; i++) {  //Records all received values in the same index in all arrays
+    if (uid == "0") {
+      break;
+    }
     if (uidList[i] == uid) {
       message0List[i] = message0;
       message1List[i] = message1;
@@ -375,8 +385,32 @@ void updateScannedList() {
 }
 
 void sendOocsi() {
-  oocsi.newMessage("kiwiSender");
-  oocsi.addString("scannedUid", scannedUid.c_str());
-  oocsi.sendMessage();
+  oocsi.newMessage("kiwiSender").addString("scannedUid", scannedUid.c_str()).sendMessage();
+  if (DEBUG){
+    Serial.println(scannedUid);
+  }
+}
+
+void execute() {
+  curDelay = delayer;
+  curTime = timer;
+  curRepeat = repeat;
+
+  const int tempHue = hue;
+  const int tempBrightness = brightness;
+  targetBrightness = brightness;
+  curBrightness = brightness;
+  ledMode = tempLedMode;
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i].setHue(tempHue);
+    leds[i].maximizeBrightness();
+    leds[i].nscale8(tempBrightness);
+  }
+
+  u8x8.clearDisplay();
+  u8x8.drawString(0, 0, message0.c_str());
+  u8x8.drawString(0, 1, message1.c_str());
+  u8x8.drawString(0, 2, message2.c_str());
+  u8x8.drawString(0, 3, message3.c_str());
 }
 
